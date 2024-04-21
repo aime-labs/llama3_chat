@@ -47,7 +47,8 @@ You can follow the steps below to quickly get up and running with Llama 3 models
     - During this process, you will be prompted to enter the URL from the email.
     - Do not use the “Copy Link” option but rather make sure to manually copy the link from the email.
 
-### 6a. Start Chat in Command Line
+### 6a. Start a Chat with LLama3 in Command Line
+
 Run the chat mode in the command line with following command:
 ```
 torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
