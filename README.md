@@ -15,7 +15,7 @@ We are unlocking the power of large language models. Our latest version of Llama
 
 This release includes model weights and starting code for pre-trained and instruction tuned Llama 3 language models — including sizes of 8B to 70B parameters.
 
-This repository is intended to run LLama 3 models as worker for the [AIME API Server](https://github.com/aime-team/aime-api-server) also an interactive console chat for testing purpose is possible.
+This repository is intended to run LLama 3 models as worker for the [AIME API Server](https://github.com/aime-team/aime-api-server) also an interactive console chat for testing purpose is available.
 
 ## Download
 
