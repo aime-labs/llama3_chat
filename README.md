@@ -15,7 +15,7 @@ We are unlocking the power of large language models. Our latest version of Llama
 
 This release includes model weights and starting code for pre-trained and instruction tuned Llama 3 language models — including sizes of 8B to 70B parameters.
 
-This repository is intended as a minimal example to load Llama 3 models and run inference. For more detailed examples, see [llama-recipes](https://github.com/facebookresearch/llama-recipes/).
+This repository is intended to run LLama 3 models as worker for the [AIME API Server](https://github.com/aime-team/aime-api-server) also an interactive console chat for testing purpose is possible.
 
 ## Download
 
@@ -47,18 +47,27 @@ You can follow the steps below to quickly get up and running with Llama 3 models
     - During this process, you will be prompted to enter the URL from the email.
     - Do not use the “Copy Link” option but rather make sure to manually copy the link from the email.
 
-6. Once the model/s you want have been downloaded, you can run the model locally using the command below:
-```bash
-torchrun --nproc_per_node 1 example_chat_completion.py \
-    --ckpt_dir Meta-Llama-3-8B-Instruct/ \
-    --tokenizer_path Meta-Llama-3-8B-Instruct/tokenizer.model \
-    --max_seq_len 512 --max_batch_size 6
+### 6a. Start Chat in Command Line
+Run the chat mode in the command line with following command:
 ```
+torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
+```
+It will start a single user chat (batch_size is 1) with Dave.
+
+### 6b. Start Llama 3 Chat as AIME API Worker
+
+To run Llama 3 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
+
+```
+torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints> --api_server <url to api server>
+```
+It will start Llama 3 as worker, waiting for job request through the AIME API Server. Use the --max_batch_size option to control how many parallel job requests can be handled (depending on the available GPU memory). 
+
 **Note**
 - Replace  `Meta-Llama-3-8B-Instruct/` with the path to your checkpoint directory and `Meta-Llama-3-8B-Instruct/tokenizer.model` with the path to your tokenizer model.
 - The `–nproc_per_node` should be set to the [MP](#inference) value for the model you are using.
 - Adjust the `max_seq_len` and `max_batch_size` parameters as needed.
-- This example runs the [example_chat_completion.py](example_chat_completion.py) found in this repository but you can change that to a different .py file.
+
 
 ## Inference
 
