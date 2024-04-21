@@ -114,6 +114,126 @@ class Llama:
         self.formatter = ChatFormat(tokenizer)
 
     @torch.inference_mode()
+    def generate_realtime(
+        self,
+        output_callback,
+        prompts: List[str],
+        max_gen_len: int,
+        temperatures: [float] =[0.6],
+        top_ps: [float] = [0.9],
+        top_ks: [int] = [40],
+        repetition_penalty: float = (1.0 / 0.85),
+    ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
+        """
+        Generate text sequences based on provided prompts using the language generation model.
+
+        Args:
+            prompt_tokens (List[List[int]]): List of tokenized prompts, where each prompt is represented as a list of integers.
+            max_gen_len (int): Maximum length of the generated text sequence.
+            temperature (float, optional): Temperature value for controlling randomness in sampling. Defaults to 0.6.
+            top_p (float, optional): Top-p probability threshold for nucleus sampling. Defaults to 0.9.
+
+        Returns:
+            Tuple[List[List[int]], Optional[List[List[float]]]]: A tuple containing generated token sequences and, if logprobs is True, corresponding token log probabilities.
+
+        Note:
+            This method uses the provided prompts as a basis for generating text. It employs nucleus sampling to produce text with controlled randomness.
+            If logprobs is True, token log probabilities are computed for each generated token.
+
+        """
+        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
+        params = self.model.params
+        bsz = len(prompt_tokens)
+        assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
+        prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len else t[len(t) - params.max_seq_len - max_gen_len:] for t in prompt_tokens]
+        prompt_tokens_length = [len(t) for t in prompt_tokens]
+
+        min_prompt_len = min(len(t) for t in prompt_tokens)
+        max_prompt_len = max(len(t) for t in prompt_tokens)
+        pad_id = self.tokenizer.pad_id
+        assert max_prompt_len + max_gen_len <= params.max_seq_len
+        total_len = min(params.max_seq_len, max_gen_len + max_prompt_len)
+        tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device="cuda")
+        for k, t in enumerate(prompt_tokens):
+            tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
+
+        prev_pos = 0
+        stream_ended = [False] * bsz
+        input_text_mask = tokens != pad_id
+        if min_prompt_len == total_len:
+            logits = self.model.forward(tokens, prev_pos)
+
+        #words = [[]] * bsz  # !!! does not work, as it creates an array of references to the same inner array!
+        words = []
+        for i in range(0, bsz):
+            words.append([])
+        generated_texts = [''] * bsz
+        num_generated_tokens = [0] * bsz
+
+        for cur_pos in range(min_prompt_len, total_len):
+
+            logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            
+            next_tokens = None
+            for idx in range(0, bsz):
+                if temperatures[idx] > 0:
+                    probs = torch.softmax(logits[idx,-1] / temperatures[idx], dim=-1)
+                    next_token = sample_top_k(probs, top_ps[idx], top_ks[idx])
+                else:
+                    next_token = torch.argmax(logits[idx,-1])
+
+                if next_tokens == None:
+                    next_tokens = next_token
+                else:
+                    next_tokens = torch.cat((next_tokens, next_token), 0)
+
+            # only replace token if prompt has already been generated
+            next_tokens = torch.where(
+                input_text_mask[:, cur_pos], tokens[:, cur_pos], next_tokens
+            )
+
+            for idx, next_token in enumerate(next_tokens):
+                if not stream_ended[idx] and (cur_pos >= prompt_tokens_length[idx]):
+                    num_generated_tokens[idx] += 1
+
+                    if next_token != self.tokenizer.eos_id:
+                        words[idx].append(next_token.item())
+                    else:
+                        stream_ended[idx] = True
+
+                    word_str = self.tokenizer.decode(words[idx]).lstrip()
+                    # print('[' + word_str + ']')
+                    if " " in word_str:
+                        text = word_str[:word_str.rfind(" ") + 1]
+                        generated_texts[idx] += text
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], False)
+                        words[idx] = words[idx][-1:]
+
+                    if (cur_pos + 1) == total_len:
+                        stream_ended[idx] = True
+                    
+                    if '\nUser:' in word_str or word_str == 'User:':
+                        stream_ended[idx] = True
+
+                    if stream_ended[idx]:
+                        generated_texts[idx] = (generated_texts[idx] + word_str).strip('\nUser:') + "\n"
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], True)
+
+            tokens[:, cur_pos] = next_tokens
+
+            # replace -1 values with 2
+            mask = tokens != -1
+            tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
+
+            prev_pos = cur_pos
+
+            if all(stream_ended):
+                break
+
+        return generated_texts
+
+
+    @torch.inference_mode()
     def generate(
         self,
         prompt_tokens: List[List[int]],
@@ -358,4 +478,21 @@ def sample_top_p(probs, p):
     probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
     next_token = torch.multinomial(probs_sort, num_samples=1)
     next_token = torch.gather(probs_idx, -1, next_token)
+    return next_token
+
+
+def sample_top_k(probs, top_p=0.0, top_k=40):
+    if top_k > 0:
+        probs_sort, probs_idx = torch.topk(probs, top_k)
+    else:
+        probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+    if top_p > 0.0:
+        probs_sum = torch.cumsum(probs_sort, dim=-1)
+        mask = probs_sum - probs_sort > top_p
+        probs_sort[mask] = 0.0
+        probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+
+    next_token = torch.multinomial(probs_sort, num_samples=1)
+    next_token = torch.gather(probs_idx, -1, next_token)
+
     return next_token
