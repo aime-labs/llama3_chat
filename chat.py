@@ -153,7 +153,7 @@ def load_flags():
         help="Top_k, 0=<top_k<=1",
     )
     parser.add_argument(
-        "--max_seq_len", type=int, default=4096, required=False,
+        "--max_seq_len", type=int, default=8192, required=False,
         help="Maximum sequence length",
     )
     parser.add_argument(
