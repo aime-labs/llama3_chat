@@ -77,7 +77,7 @@ Different models require different model-parallel (MP) values:
 |  Model | MP |
 |--------|----|
 | 8B     | 1  |
-| 70B    | 8  |
+| 70B    | 8, 4, 2 (for 4 and 2 the weights have to be converted with the convert_weights script)  |
 
 All models support sequence length up to 8192 tokens, but we pre-allocate the cache according to `max_seq_len` and `max_batch_size` values. So set those according to your hardware.
 
