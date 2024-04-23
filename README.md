@@ -17,6 +17,15 @@ This release includes model weights and starting code for pre-trained and instru
 
 This repository is intended to run LLama 3 models as worker for the [AIME API Server](https://github.com/aime-team/aime-api-server) also an interactive console chat for testing purpose is available.
 
+Llama 3 API demo server running at: [https://api.aime.info/llama3-chat/](https://api.aime.info/llama3-chat/)
+
+## Features
+
+* Realtime interactive console chat example
+* Llama 3 70B support for 2 GPU (e.g. 2x A100/H100 80 GB) and 4 GPU (e.g. 4x A100 40GB/RTX A6000/6000 Ada) setups
+* Worker mode for AIME API server to use Llama3 as HTTP/HTTPS API endpoint
+* Batch job aggreation support for AIME API server for higher GPU throughput with multi-user chat
+
 ## Download
 
 In order to download the model weights and tokenizer, please visit the [Meta Llama website](https://llama.meta.com/llama-downloads/) and accept our License.
@@ -47,7 +56,21 @@ You can follow the steps below to quickly get up and running with Llama 3 models
     - During this process, you will be prompted to enter the URL from the email.
     - Do not use the “Copy Link” option but rather make sure to manually copy the link from the email.
 
-### 6a. Start a Chat with LLama3 in Command Line
+#### 6. Convert 70B models for 2 or 4 GPU configuration (if required)
+
+The default sharding configuration of the downloaded Llama 3 70B model weights is for 8 GPUs (with 24 GB memory). The weights for a 4 or 2 GPU setups can be converted with the 'convert_weights.py' script.
+
+To do so run following command:
+
+```
+python convert_weights.py --input_dir /data/models/Meta-Llama-3-70B-Instruct/ --model_size 70B --num_gpus <num_gpus>
+```
+<num_gpus> can be:
+
+- 4 for 4x at least 40 GB memory per GPU
+- 2 for 2x at least 80 GB memory per GPU
+
+#### 7a. Start a Chat with LLama3 in Command Line
 
 Run the chat mode in the command line with following command:
 ```
@@ -55,7 +78,7 @@ torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoi
 ```
 It will start a single user chat (batch_size is 1) with Dave.
 
-### 6b. Start Llama 3 Chat as AIME API Worker
+#### 7b. Start Llama 3 Chat as AIME API Worker
 
 To run Llama 3 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
 
