@@ -92,9 +92,9 @@ def main():
             print('Done')
     else:
         
-        ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
-              "User: Hello, Dave.\n" +\
-              "Dave: How can I assist you today?\n"
+        ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Steve.\n" +\
+              "User: Hello, Steve.\n" +\
+              "Steve: How can I assist you today?\n"
 
         callback = ProcessOutputToShellCallback(local_rank, ctx)
         print(f'\n{ctx}', end='', flush=True)
@@ -102,8 +102,8 @@ def main():
             if local_rank == 0:
                 prompt = input(f'User: ')
                 if ctx != "":                    
-                    print("Dave: ", end='', flush=True)
-                    ctx = ctx + "User: " + prompt + "\n" + "Dave: "
+                    print("Steve: ", end='', flush=True)
+                    ctx = ctx + "User: " + prompt + "\n" + "Steve: "
                 else:
                     ctx = prompt + "\n"
                 

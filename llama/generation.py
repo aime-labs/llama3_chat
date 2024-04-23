@@ -81,7 +81,11 @@ class Llama:
             sys.stdout = open(os.devnull, "w")
 
         start_time = time.time()
-        checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
+        checkpoints = sorted(Path(ckpt_dir).glob(f'merged.{model_parallel_size}GPUs.*.pth'))
+        if model_parallel_size != len(checkpoints):
+            checkpoints = sorted(Path(ckpt_dir).glob(f'consolidated.*.pth'))
+        print('checkpoints', checkpoints)
+
         assert len(checkpoints) > 0, f"no checkpoint files found in {ckpt_dir}"
         assert model_parallel_size == len(
             checkpoints
