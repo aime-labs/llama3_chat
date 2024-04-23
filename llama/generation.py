@@ -106,6 +106,7 @@ class Llama:
             torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
         else:
             torch.set_default_tensor_type(torch.cuda.HalfTensor)
+
         model = Transformer(model_args)
         model.load_state_dict(checkpoint, strict=False)
         print(f"Loaded in {time.time() - start_time:.2f} seconds")
@@ -200,10 +201,11 @@ class Llama:
                 if not stream_ended[idx] and (cur_pos >= prompt_tokens_length[idx]):
                     num_generated_tokens[idx] += 1
 
-                    if next_token != self.tokenizer.eos_id:
-                        words[idx].append(next_token.item())
-                    else:
+                    next_token_id = next_token.item()
+                    if (next_token_id == self.tokenizer.eos_id) or (next_token_id in self.tokenizer.stop_tokens):
                         stream_ended[idx] = True
+                    else:
+                        words[idx].append(next_token_id)
 
                     word_str = self.tokenizer.decode(words[idx]).lstrip()
                     # print('[' + word_str + ']')
