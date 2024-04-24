@@ -14,7 +14,7 @@ import random
 import numpy as np
 
 WORKER_JOB_TYPE = "llama3"
-WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
+WORKER_AUTH_KEY = "66745b07e305b50505ca2b3284b4ae5f65d1"
 VERSION = 0
 
 def main():
@@ -92,7 +92,7 @@ def main():
             print('Done')
     else:
         
-        ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Steve.\n" +\
+        ctx = "A dialog, where User interacts with a helpful, kind, obedient, honest and very reasonable assistant called Steve.\n" +\
               "User: Hello, Steve.\n" +\
               "Steve: How can I assist you today?\n"
 
