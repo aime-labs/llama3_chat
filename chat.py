@@ -14,7 +14,7 @@ import random
 import numpy as np
 
 WORKER_JOB_TYPE = "llama3"
-WORKER_AUTH_KEY = "66745b07e305b50505ca2b3284b4ae5f65d1"
+WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
 VERSION = 0
 
 def main():
