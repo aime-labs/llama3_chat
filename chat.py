@@ -41,7 +41,7 @@ def main():
     if args.api_server:
 
         from aime_api_worker_interface import APIWorkerInterface
-        api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, args.auth_key, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
+        api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, args.api_auth_key, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
         callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name)
 
 
@@ -179,8 +179,8 @@ def load_flags():
         help="ID of the GPU to be used"
     )
     parser.add_argument(
-        "--auth_key", type=str , default=DEFAULT_WORKER_AUTH_KEY, required=False, 
-        help="Maximum batch size",
+        "--api_auth_key", type=str , default=DEFAULT_WORKER_AUTH_KEY, required=False, 
+        help="API server worker auth key",
     )
 
     
