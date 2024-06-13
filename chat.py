@@ -41,7 +41,7 @@ def main():
         from aime_api_worker_interface import APIWorkerInterface
 
         api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, args.api_auth_key, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
-        callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name)
+        callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name, args.max_seq_len)
 
     generator = Llama.build(
         ckpt_dir=args.ckpt_dir,
