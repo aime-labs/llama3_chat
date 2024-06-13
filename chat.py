@@ -1,9 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
 
-from typing import List, Optional
-
-from llama import Llama, Dialog
+from llama import Llama
 
 import argparse
 from pathlib import Path
@@ -42,8 +40,7 @@ def main():
 
         from aime_api_worker_interface import APIWorkerInterface
         api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, args.auth_key, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
-        callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name)
-
+        callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name, args.max_seq_len)
 
     generator = Llama.build(
         ckpt_dir=args.ckpt_dir,
@@ -51,9 +48,7 @@ def main():
         max_seq_len=args.max_seq_len,
         max_batch_size=args.max_batch_size,
     )
-
     set_seed(args.seed)
-
     if args.api_server:
         while True:
             prompts = []
@@ -68,46 +63,81 @@ def main():
                 print(f'processing job ', end='', flush=True)
                 for job_data in job_batch_data:
                     print(f'{job_data.get("job_id")} ... ', end='', flush=True)
-                    ctx = job_data['text']
-                    prompts.append(ctx)
+                    prompt_input = job_data['prompt_input']
+                    chat_context = job_data.get('chat_context')
+                    if chat_context:
+                        chat_context.append(
+                            {
+                                "role": "user", 
+                                "content": prompt_input
+                            }
+                        )
+                        prompts.append(chat_context)
+                    else:
+                        prompts.append(prompt_input)
                 top_ps = api_worker.get_job_batch_parameter('top_p')
                 top_ks = api_worker.get_job_batch_parameter('top_k')
                 temperatures = api_worker.get_job_batch_parameter('temperature')
+                max_gen_tokens = api_worker.get_job_batch_parameter('max_gen_tokens')
             else:
-                prompts = [''] * batch_size # array has to be same size for multi rank broadcast
-                top_ps = [args.top_p] * batch_size # array has to be same size for multi rank broadcast
-                top_ks = [args.top_k] * batch_size # array has to be same size for multi rank broadcast
-                temperatures = [args.temperature] * batch_size # array has to be same size for multi rank broadcast
+                prompts = ['' for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                top_ps = [args.top_p for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                top_ks = [args.top_k for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                temperatures = [args.temperature for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                max_gen_tokens = [500 for _ in range(batch_size)]
 
             # synchronize across ranks
             torch.distributed.broadcast_object_list(prompts, 0)
             torch.distributed.broadcast_object_list(top_ps, 0)
             torch.distributed.broadcast_object_list(top_ks, 0)
             torch.distributed.broadcast_object_list(temperatures, 0)
+            torch.distributed.broadcast_object_list(max_gen_tokens, 0)
 
-            results = generator.generate_realtime(
-                callback, prompts, max_gen_len=1024, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks, repetition_penalty=args.repetition_penalty
+            generator.generate_realtime(
+                callback, prompts, max_gen_len=max_gen_tokens, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks
             )
 
             print('Done')
     else:
-        
-        ctx = "A dialog, where User interacts with a helpful, kind, obedient, honest and very reasonable assistant called Steve.\n" +\
-              "User: Hello, Steve.\n" +\
-              "Steve: How can I assist you today?\n"
-
+        if not args.temperature:
+            args.temperature = 0.8
+        ctx = [
+            {
+                "role": "system",
+                "content": 
+                    "You are a helpful, respectful and honest assistant named Steve. " +\
+                    "Always answer as helpfully as possible, while being safe. " +\
+                    "Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. " +\
+                    "Please ensure that your responses are socially unbiased and positive in nature. " +\
+                    "If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. " +\
+                    "If you don't know the answer to a question, please don't share false information."
+            },
+            {
+                "role": "user", 
+                "content": "Hello, Steve."
+            },
+            {
+                "role": "assistant", 
+                "content": "How can I assist you today?"
+            },
+        ]
+        print(f'\n{ctx[0]["content"]}')
+        print('User: ', f'{ctx[1]["content"]}')
+        print('Steve: ',f'{ctx[2]["content"]}')
         callback = ProcessOutputToShellCallback(local_rank, ctx)
-        print(f'\n{ctx}', end='', flush=True)
         while True:
             if local_rank == 0:
                 prompt = input(f'User: ')
-                if ctx != "":                    
+                if prompt != "":                    
                     print("Steve: ", end='', flush=True)
-                    ctx = ctx + "User: " + prompt + "\n" + "Steve: "
-                else:
-                    ctx = prompt + "\n"
+                    callback.ctx.append(
+                        {
+                            "role": "user", 
+                            "content": prompt
+                        }
+                    )
                 
-                prompts = [ctx]
+                prompts = [callback.ctx]
             else:
                 prompts = ['']
             torch.distributed.broadcast_object_list(prompts, src=0)
@@ -117,11 +147,10 @@ def main():
                 args.top_p = 0.9
             if not args.top_k:
                 args.top_k = 40
-            results = generator.generate_realtime(
-                callback, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
+            generator.generate_realtime(
+                callback, prompts, max_gen_len=[1024], temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k]
             )
 
-            ctx = callback.ctx
 
 
 def set_seed(seed):
@@ -142,8 +171,8 @@ def load_flags():
     )
     parser.add_argument(
         '--temperature', type=float, required=False,
-    help='Temperature'
-                    )
+        help='Temperature'
+    )
     parser.add_argument(
         "--top_p", type=float, required=False,
         help="Top_p, 0=<top_p<=1"
@@ -160,12 +189,10 @@ def load_flags():
         "--max_batch_size", type=int, default=1, required=False,
         help="Maximum batch size",
     )    
-
     parser.add_argument(
         "--seed", type=int, default=1234, required=False,
         help="Initial Seed",
     )    
-
     parser.add_argument(
         "--repetition_penalty", type=float, default=(1.0/0.85), required=False,
         help="Repetition penalty",
@@ -203,10 +230,11 @@ class ProcessOutputCallback():
     
     PROGRESS_UPDATES_PER_SEC = 5
 
-    def __init__(self, local_rank, api_worker, model_name):
+    def __init__(self, local_rank, api_worker, model_name, max_seq_len):
         self.local_rank = local_rank
         self.api_worker = api_worker
         self.model_name = model_name
+        self.max_seq_len = max_seq_len
         self.progress_update_data = {}
         self.last_progress_update = time.time()
 
@@ -214,7 +242,7 @@ class ProcessOutputCallback():
         if self.local_rank == 0:
             job_batch_data = self.api_worker.get_current_job_batch_data()
             job_data = job_batch_data[batch_idx]
-            result = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens}
+            result = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens, 'max_seq_len': self.max_seq_len}
             if finished:
                 self.progress_update_data.pop(batch_idx, None)
                 return self.api_worker.send_job_results(result, job_data=job_data)
@@ -239,22 +267,21 @@ class ProcessOutputToShellCallback():
     def __init__(self, local_rank, ctx):
         self.local_rank = local_rank
         self.ctx = ctx
-        self.previous_token = None
+        self.current_answer = None
 
     def process_output(self, batch_idx, output, num_generated_tokens, finished):
-        if self.previous_token:
-            token = output.split(self.previous_token)[-1]
-        else:
-            token = output
+        if self.local_rank == 0:
+            token = output.replace(self.current_answer, '') if self.current_answer else output
+            print(token, end='', flush=True)
+            self.current_answer = output if not finished else None
 
-        print(token, end='', flush=True)
-        
         if finished:
-            self.ctx = output
-            self.previous_token = None  
-        else:
-            if token:
-                self.previous_token = token
+            self.ctx.append(
+                {
+                    "role": "assistant", 
+                    "content": output
+                }
+            )
 
 
 

@@ -220,6 +220,8 @@ class ChatFormat:
         return tokens
 
     def encode_dialog_prompt(self, dialog: Dialog) -> List[int]:
+        if isinstance(dialog, str):
+            return self.tokenizer.encode(dialog.strip(), bos=True, eos=False)
         tokens = []
         tokens.append(self.tokenizer.special_tokens["<|begin_of_text|>"])
         for message in dialog:

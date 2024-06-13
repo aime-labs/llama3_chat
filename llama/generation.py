@@ -16,8 +16,8 @@ from fairscale.nn.model_parallel.initialize import (
     model_parallel_is_initialized,
 )
 
-from llama.model import ModelArgs, Transformer
-from llama.tokenizer import ChatFormat, Dialog, Message, Tokenizer
+from .model import ModelArgs, Transformer
+from .tokenizer import ChatFormat, Dialog, Message, Tokenizer
 
 
 class CompletionPrediction(TypedDict, total=False):
@@ -123,11 +123,10 @@ class Llama:
         self,
         output_callback,
         prompts: List[str],
-        max_gen_len: int,
-        temperatures: [float] =[0.6],
-        top_ps: [float] = [0.9],
-        top_ks: [int] = [40],
-        repetition_penalty: float = (1.0 / 0.85),
+        max_gen_len: List[int],
+        temperatures: List[float] =[0.6],
+        top_ps: List[float] = [0.9],
+        top_ks: List[int] = [40],
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
         """
         Generate text sequences based on provided prompts using the language generation model.
@@ -146,18 +145,19 @@ class Llama:
             If logprobs is True, token log probabilities are computed for each generated token.
 
         """
-        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
+        prompt_tokens = [self.formatter.encode_dialog_prompt(prompt) for prompt in prompts]
+        #prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
         params = self.model.params
         bsz = len(prompt_tokens)
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
-        prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len else t[len(t) - params.max_seq_len - max_gen_len:] for t in prompt_tokens]
+        prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len[idx] else t[len(t) - params.max_seq_len - max_gen_len[idx]:] for idx, t in enumerate(prompt_tokens)]
         prompt_tokens_length = [len(t) for t in prompt_tokens]
 
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
         pad_id = self.tokenizer.pad_id
-        assert max_prompt_len + max_gen_len <= params.max_seq_len
-        total_len = min(params.max_seq_len, max_gen_len + max_prompt_len)
+        assert max_prompt_len + max(max_gen_len) <= params.max_seq_len
+        total_len = min(params.max_seq_len, max(max_gen_len) + max_prompt_len)
         tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device="cuda")
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
@@ -200,7 +200,7 @@ class Llama:
             for idx, next_token in enumerate(next_tokens):
                 if not stream_ended[idx] and (cur_pos >= prompt_tokens_length[idx]):
                     num_generated_tokens[idx] += 1
-
+                    
                     next_token_id = next_token.item()
                     if (next_token_id == self.tokenizer.eos_id) or (next_token_id in self.tokenizer.stop_tokens):
                         stream_ended[idx] = True
