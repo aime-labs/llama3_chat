@@ -63,7 +63,7 @@ def main():
                 print(f'processing job ', end='', flush=True)
                 for job_data in job_batch_data:
                     print(f'{job_data.get("job_id")} ... ', end='', flush=True)
-
+                    
                     prompt_input = job_data.get('prompt_input')
                     if not prompt_input:
                         prompt_input = job_data.get('text')
@@ -82,6 +82,8 @@ def main():
                 top_ks = api_worker.get_job_batch_parameter('top_k')
                 temperatures = api_worker.get_job_batch_parameter('temperature')
                 max_gen_tokens = api_worker.get_job_batch_parameter('max_gen_tokens')
+                if None in max_gen_tokens:
+                    max_gen_tokens = [500 for _ in range(batch_size)]
             else:
                 prompts = ['' for _ in range(batch_size)] # array has to be same size for multi rank broadcast
                 top_ps = [args.top_p for _ in range(batch_size)] # array has to be same size for multi rank broadcast
