@@ -55,7 +55,6 @@ def main():
             prompts = []
             
             job_batch_data = api_worker.job_batch_request(args.max_batch_size)
-
             batch_size = [len(job_batch_data)]
             torch.distributed.broadcast_object_list(batch_size, 0)
             batch_size = batch_size[0]
@@ -64,7 +63,10 @@ def main():
                 print(f'processing job ', end='', flush=True)
                 for job_data in job_batch_data:
                     print(f'{job_data.get("job_id")} ... ', end='', flush=True)
-                    prompt_input = job_data['prompt_input']
+
+                    prompt_input = job_data.get('prompt_input')
+                    if not prompt_input:
+                        prompt_input = job_data.get('text')
                     chat_context = job_data.get('chat_context')
                     if chat_context:
                         chat_context.append(
