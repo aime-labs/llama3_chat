@@ -65,7 +65,7 @@ def main():
                     print(f'{job_data.get("job_id")} ... ', end='', flush=True)
                     
                     prompt_input = job_data.get('prompt_input')
-                    if not prompt_input:
+                    if prompt_input is None:
                         prompt_input = job_data.get('text')
                     chat_context = job_data.get('chat_context')
                     if chat_context:
@@ -133,14 +133,14 @@ def main():
         while True:
             if local_rank == 0:
                 prompt = input(f'User: ')
-                if prompt != "":                    
-                    print("Steve: ", end='', flush=True)
-                    callback.ctx.append(
-                        {
-                            "role": "user", 
-                            "content": prompt
-                        }
-                    )
+              
+                print("Steve: ", end='', flush=True)
+                callback.ctx.append(
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                )
                 
                 prompts = [callback.ctx]
             else:
