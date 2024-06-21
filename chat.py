@@ -243,11 +243,11 @@ class ProcessOutputCallback():
         self.progress_update_data = {}
         self.last_progress_update = time.time()
 
-    def process_output(self, batch_idx, output, num_generated_tokens, finished):
+    def process_output(self, batch_idx, output, num_generated_tokens, current_context_length, finished):
         if self.local_rank == 0:
             job_batch_data = self.api_worker.get_current_job_batch_data()
             job_data = job_batch_data[batch_idx]
-            result = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens, 'max_seq_len': self.max_seq_len}
+            result = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens, 'max_seq_len': self.max_seq_len, 'current_context_length': current_context_length + num_generated_tokens}
             if finished:
                 self.progress_update_data.pop(batch_idx, None)
                 return self.api_worker.send_job_results(result, job_data=job_data)

@@ -212,7 +212,7 @@ class Llama:
                     if " " in word_str:
                         text = word_str[:word_str.rfind(" ") + 1]
                         generated_texts[idx] += text
-                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], False)
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], prompt_tokens_length[idx], False)
                         words[idx] = words[idx][-1:]
 
                     if (cur_pos + 1) == total_len:
@@ -223,7 +223,7 @@ class Llama:
 
                     if stream_ended[idx]:
                         generated_texts[idx] = (generated_texts[idx] + word_str).strip('\nUser:') + "\n"
-                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], True)
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], prompt_tokens_length[idx], True)
 
             tokens[:, cur_pos] = next_tokens
 
