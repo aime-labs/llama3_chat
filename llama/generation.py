@@ -150,13 +150,13 @@ class Llama:
         params = self.model.params
         bsz = len(prompt_tokens)
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
-        prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len[idx] else t[len(t) - params.max_seq_len - max_gen_len[idx]:] for idx, t in enumerate(prompt_tokens)]
+        prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len[idx] else t[len(t) - params.max_seq_len + max_gen_len[idx]:] for idx, t in enumerate(prompt_tokens)]
         prompt_tokens_length = [len(t) for t in prompt_tokens]
 
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
         pad_id = self.tokenizer.pad_id
-        assert max_prompt_len + max(max_gen_len) <= params.max_seq_len
+
         total_len = min(params.max_seq_len, max(max_gen_len) + max_prompt_len)
         tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device="cuda")
         for k, t in enumerate(prompt_tokens):
@@ -168,12 +168,9 @@ class Llama:
         if min_prompt_len == total_len:
             logits = self.model.forward(tokens, prev_pos)
 
-        #words = [[]] * bsz  # !!! does not work, as it creates an array of references to the same inner array!
-        words = []
-        for i in range(0, bsz):
-            words.append([])
-        generated_texts = [''] * bsz
-        num_generated_tokens = [0] * bsz
+        words = [[] for i in range(bsz)]
+        generated_texts = ['' for i in range(bsz)]
+        num_generated_tokens = [0 for i in range(bsz)]
 
         for cur_pos in range(min_prompt_len, total_len):
 
@@ -208,7 +205,6 @@ class Llama:
                         words[idx].append(next_token_id)
 
                     word_str = self.tokenizer.decode(words[idx]).lstrip()
-                    # print('[' + word_str + ']')
                     if " " in word_str:
                         text = word_str[:word_str.rfind(" ") + 1]
                         generated_texts[idx] += text

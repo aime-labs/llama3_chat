@@ -227,5 +227,8 @@ class ChatFormat:
         for message in dialog:
             tokens.extend(self.encode_message(message))
         # Add the start of an assistant message for the model to complete.
-        tokens.extend(self.encode_header({"role": "assistant", "content": ""}))
+        if dialog[-1]["role"] == 'user':
+            tokens.extend(self.encode_header({"role": "assistant", "content": ""}))
+        else:
+            tokens.pop() # Remove eot_id to continue assistant message
         return tokens
