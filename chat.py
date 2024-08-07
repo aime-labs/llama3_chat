@@ -78,6 +78,17 @@ def main():
                         prompts.append(chat_context)
                     else:
                         prompts.append(prompt_input)
+                for batch_idx, dialog in enumerate(prompts):
+                    for item in dialog:
+                        if not isinstance(item, dict) or not all(key in item for key in ("role", "content")):
+                            callback.process_output(
+                                batch_idx,
+                                '',
+                                0,
+                                0,
+                                True,
+                                f'Dialog has invalid chat context format! Format should be [{{"role": "user/assistant/system", "content": "Message content"}}, ...] but is {dialog}'
+                            )
                 top_ps = api_worker.get_job_batch_parameter('top_p')
                 top_ks = api_worker.get_job_batch_parameter('top_k')
                 temperatures = api_worker.get_job_batch_parameter('temperature')
