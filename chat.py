@@ -61,13 +61,17 @@ def main():
 
             if local_rank == 0:
                 print(f'processing job ', end='', flush=True)
-                for job_data in job_batch_data:
+                for batch_idx, job_data in enumerate(job_batch_data):
                     print(f'{job_data.get("job_id")} ... ', end='', flush=True)
                     prompt_input = job_data.get('prompt_input')
                     if prompt_input is None:
                         prompt_input = job_data.get('text')
                     chat_context = job_data.get('chat_context')
                     if chat_context:
+                        if not validate_chat_context(batch_idx, chat_context, callback):
+                            print('Wrong context shape')
+                            prompts.append('')
+                            continue
                         if prompt_input:
                             chat_context.append(
                                 {
@@ -78,17 +82,7 @@ def main():
                         prompts.append(chat_context)
                     else:
                         prompts.append(prompt_input)
-                for batch_idx, dialog in enumerate(prompts):
-                    for item in dialog:
-                        if not isinstance(item, dict) or not all(key in item for key in ("role", "content")):
-                            callback.process_output(
-                                batch_idx,
-                                '',
-                                0,
-                                0,
-                                True,
-                                f'Dialog has invalid chat context format! Format should be [{{"role": "user/assistant/system", "content": "Message content"}}, ...] but is {dialog}'
-                            )
+
                 top_ps = api_worker.get_job_batch_parameter('top_p')
                 top_ks = api_worker.get_job_batch_parameter('top_k')
                 temperatures = api_worker.get_job_batch_parameter('temperature')
@@ -171,6 +165,19 @@ def main():
                 callback, prompts, max_gen_len=[1024], temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k]
             )
 
+def validate_chat_context(batch_idx, chat_context, callback):
+    for item in chat_context:
+        if not isinstance(item, dict) or not all(key in item for key in ("role", "content")):
+            callback.process_output(
+                batch_idx,
+                '',
+                0,
+                0,
+                True,
+                f'Dialog has invalid chat context format! Format should be [{{"role": "user/assistant/system", "content": "Message content"}}, ...] but is {chat_context}'
+            )
+            return False
+    return True
 
 
 def set_seed(seed):
