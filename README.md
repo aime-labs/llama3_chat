@@ -9,7 +9,7 @@
 ---
 
 
-# Meta Llama 3
+# Meta Llama 3 / 3.1
 
 We are unlocking the power of large language models. Our latest version of Llama is now accessible to individuals, creators, researchers, and businesses of all sizes so that they can experiment, innovate, and scale their ideas responsibly.
 
@@ -70,7 +70,7 @@ python convert_weights.py --input_dir /data/models/Meta-Llama-3-70B-Instruct/ --
 - 4 for 4x at least 40 GB memory per GPU
 - 2 for 2x at least 80 GB memory per GPU
 
-#### 7a. Start a Chat with LLama3 in Command Line
+#### 7a. Start a Chat with LLama 3 / 3.1 in Command Line
 
 Run the chat mode in the command line with following command:
 ```
@@ -78,14 +78,14 @@ torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoi
 ```
 It will start a single user chat (batch_size is 1) with Dave.
 
-#### 7b. Start Llama 3 Chat as AIME API Worker
+#### 7b. Start Llama 3 / 3.1 Chat as AIME API Worker
 
-To run Llama 3 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
+To run Llama 3 / 3.1 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
 
 ```
 torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints> --api_server <url to api server>
 ```
-It will start Llama 3 as worker, waiting for job request through the AIME API Server. Use the --max_batch_size option to control how many parallel job requests can be handled (depending on the available GPU memory). 
+It will start Llama 3 / 3.1 as a worker, waiting for job request through the AIME API Server. Use the --max_batch_size option to control how many parallel job requests can be handled (depending on the available GPU memory). 
 
 **Note**
 - Replace  `Meta-Llama-3-8B-Instruct/` with the path to your checkpoint directory and `Meta-Llama-3-8B-Instruct/tokenizer.model` with the path to your tokenizer model.
