@@ -13,7 +13,7 @@ import numpy as np
 
 WORKER_JOB_TYPE = "llama3"
 DEFAULT_WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
-VERSION = 0
+VERSION = 1
 
 def main():
     """
@@ -55,62 +55,65 @@ def main():
             prompts = []
             
             job_batch_data = api_worker.job_batch_request(args.max_batch_size)
-            batch_size = [len(job_batch_data)]
-            torch.distributed.broadcast_object_list(batch_size, 0)
-            batch_size = batch_size[0]
+            callback.set_current_job_batch_data(job_batch_data)
+            if job_batch_data:
 
-            if local_rank == 0:
-                print(f'processing job ', end='', flush=True)
-                for batch_idx, job_data in enumerate(job_batch_data):
-                    print(f'{job_data.get("job_id")} ... ', end='', flush=True)
-                    prompt_input = job_data.get('prompt_input')
-                    if prompt_input is None:
-                        prompt_input = job_data.get('text')
-                    chat_context = job_data.get('chat_context')
-                    if chat_context:
-                        if not validate_chat_context(batch_idx, chat_context, callback):
-                            print('Wrong context shape')
-                            prompts.append('')
-                            continue
-                        if prompt_input:
-                            chat_context.append(
-                                {
-                                    "role": "user", 
-                                    "content": prompt_input
-                                }
-                            )
-                        prompts.append(chat_context)
-                    else:
-                        prompts.append(prompt_input)
+                batch_size = [len(job_batch_data)]
+                torch.distributed.broadcast_object_list(batch_size, 0)
+                batch_size = batch_size[0]
 
-                top_ps = api_worker.get_job_batch_parameter('top_p')
-                top_ks = api_worker.get_job_batch_parameter('top_k')
-                temperatures = api_worker.get_job_batch_parameter('temperature')
-                max_gen_tokens = api_worker.get_job_batch_parameter('max_gen_tokens')
-                if None in max_gen_tokens:
+                if local_rank == 0:
+                    print(f'processing job ', end='', flush=True)
+                    for batch_idx, job_data in enumerate(job_batch_data):
+                        print(f'{job_data.get("job_id")} ... ', end='', flush=True)
+                        prompt_input = job_data.get('prompt_input')
+                        if prompt_input is None:
+                            prompt_input = job_data.get('text')
+                        chat_context = job_data.get('chat_context')
+                        if chat_context:
+                            if not validate_chat_context(batch_idx, chat_context, callback):
+                                print('Wrong context shape')
+                                prompts.append('')
+                                continue
+                            if prompt_input:
+                                chat_context.append(
+                                    {
+                                        "role": "user", 
+                                        "content": prompt_input
+                                    }
+                                )
+                            prompts.append(chat_context)
+                        else:
+                            prompts.append(prompt_input)
+
+                    top_ps = api_worker.get_job_batch_parameter('top_p')
+                    top_ks = api_worker.get_job_batch_parameter('top_k')
+                    temperatures = api_worker.get_job_batch_parameter('temperature')
+                    max_gen_tokens = api_worker.get_job_batch_parameter('max_gen_tokens')
+                    if None in max_gen_tokens:
+                        max_gen_tokens = [500 for _ in range(batch_size)]
+                else:
+                    prompts = ['' for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                    top_ps = [args.top_p for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                    top_ks = [args.top_k for _ in range(batch_size)] # array has to be same size for multi rank broadcast
+                    temperatures = [args.temperature for _ in range(batch_size)] # array has to be same size for multi rank broadcast
                     max_gen_tokens = [500 for _ in range(batch_size)]
-            else:
-                prompts = ['' for _ in range(batch_size)] # array has to be same size for multi rank broadcast
-                top_ps = [args.top_p for _ in range(batch_size)] # array has to be same size for multi rank broadcast
-                top_ks = [args.top_k for _ in range(batch_size)] # array has to be same size for multi rank broadcast
-                temperatures = [args.temperature for _ in range(batch_size)] # array has to be same size for multi rank broadcast
-                max_gen_tokens = [500 for _ in range(batch_size)]
 
-            # synchronize across ranks
-            torch.distributed.broadcast_object_list(prompts, 0)
-            torch.distributed.broadcast_object_list(top_ps, 0)
-            torch.distributed.broadcast_object_list(top_ks, 0)
-            torch.distributed.broadcast_object_list(temperatures, 0)
-            torch.distributed.broadcast_object_list(max_gen_tokens, 0)
-            try:
-                generator.generate_realtime(
-                    callback, prompts, max_gen_len=max_gen_tokens, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks
-                )
-                print('Done')
-            except torch.cuda.OutOfMemoryError as exc:
-                print('OOM Error')
-                for batch_idx in range(batch_size):
-                    callback.process_output(batch_idx, '', 0, 0, True, str(exc))
+                # synchronize across ranks
+                torch.distributed.broadcast_object_list(prompts, 0)
+                torch.distributed.broadcast_object_list(top_ps, 0)
+                torch.distributed.broadcast_object_list(top_ks, 0)
+                torch.distributed.broadcast_object_list(temperatures, 0)
+                torch.distributed.broadcast_object_list(max_gen_tokens, 0)
+                try:
+                    generator.generate_realtime(
+                        callback, prompts, max_gen_len=max_gen_tokens, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks
+                    )
+                    print('Done')
+                except torch.cuda.OutOfMemoryError as exc:
+                    print('OOM Error')
+                    for batch_idx in range(batch_size):
+                        callback.process_output(batch_idx, '', 0, 0, True, str(exc))
 
     else:
         if not args.temperature:
@@ -164,6 +167,7 @@ def main():
             generator.generate_realtime(
                 callback, prompts, max_gen_len=[1024], temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k]
             )
+
 
 def validate_chat_context(batch_idx, chat_context, callback):
     for item in chat_context:
@@ -264,11 +268,15 @@ class ProcessOutputCallback():
         self.max_seq_len = max_seq_len
         self.progress_update_data = {}
         self.last_progress_update = time.time()
+        self.current_job_batch_data = []
+
+
+    def set_current_job_batch_data(self, job_batch_data):
+        self.current_job_batch_data = job_batch_data
+
 
     def process_output(self, batch_idx, output, num_generated_tokens, current_context_length, finished, error=None):
         if self.local_rank == 0:
-            job_batch_data = self.api_worker.get_current_job_batch_data()
-            job_data = job_batch_data[batch_idx]
             result = {
                 'text': output,
                 'model_name': self.model_name,
@@ -280,7 +288,7 @@ class ProcessOutputCallback():
                 result['error'] = error
             if finished:
                 self.progress_update_data.pop(batch_idx, None)
-                return self.api_worker.send_job_results(result, job_data=job_data)
+                return self.api_worker.send_job_results(result, job_data=self.current_job_batch_data[batch_idx])
             else:
                 self.progress_update_data[batch_idx] = result
                 now = time.time()
@@ -293,7 +301,7 @@ class ProcessOutputCallback():
                         result = self.progress_update_data[idx]
                         results.append(result)
                         progress_values.append(result.get('num_generated_tokens', 0))
-                        progress_job_batch_data.append(job_batch_data[idx])
+                        progress_job_batch_data.append(self.current_job_batch_data[idx])
                     self.progress_update_data = {}
                     return self.api_worker.send_batch_progress(progress_values, results, job_batch_data=progress_job_batch_data)
 
